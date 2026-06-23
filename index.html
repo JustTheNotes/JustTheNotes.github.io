@@ -58,8 +58,8 @@
         .main-pane { flex: 1; overflow-y: auto; padding: 30px; position: relative; }
 
         /* --- Global Toolbar (Undo/Redo & Delete) --- */
-        .global-toolbar { position: absolute; top: 20px; right: 30px; display: flex; gap: 10px; z-index: 100; }
-        .global-toolbar button { background: #eab308; color: black; font-size: 1rem; padding: 8px 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.global-toolbar { position: fixed; top: 10px; right: 80px; display: flex; gap: 10px; z-index: 5000; }
+       .global-toolbar button { background: #eab308; color: black; font-size: 1rem; padding: 8px 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
         /* --- View Sections --- */
         .view-section { max-width: 900px; margin: 0 auto; animation: fadeIn 0.3s ease-in-out; padding-top: 20px; }
@@ -243,19 +243,47 @@
         }
 
         @media (max-width: 768px) {
+            /* --- Existing Mobile Layout --- */
             .app-layout { flex-direction: column; }
             .sidebar-nav { width: 100%; flex-direction: row; padding: 10px; justify-content: space-around; padding-bottom: calc(10px + env(safe-area-inset-bottom)); box-shadow: 0 -2px 10px rgba(0,0,0,0.1); order: 2; }
             .sidebar-header, .sidebar-toggle-btn { display: none; }
             .nav-btn { flex: 1; justify-content: center; padding: 10px; font-size: 0.9rem; flex-direction: column; gap: 5px; border-radius: 8px;}
-            .main-pane { order: 1; padding: 15px; padding-top: 60px; } 
-            .global-toolbar { top: 15px; right: 15px; }
-            .hero h1 { font-size: 2.2rem; }
+            .main-pane { order: 1; padding: 10px; padding-top: 50px; } 
+            .global-toolbar { top: 10px; right: 65px; }
             .fixed-close-btn { top: 15px; right: 15px; width: 40px; height: 40px; font-size: 1.2rem;}
-            .quiz-card { font-size: 1.3rem; padding: 20px; }
             .settings-layout { flex-direction: column; height: auto; }
             .settings-sidebar { width: 100%; border-right: none; border-bottom: 2px solid var(--border); padding-right: 0; padding-bottom: 20px; flex-direction: row; flex-wrap: wrap; }
             .settings-nav-btn { flex: 1; justify-content: center; }
+
+            /* --- NEW: Shrink the global scale for mobile --- */
+            html { font-size: 14px; }
+            
+            /* --- NEW: Shrink the boxes and padding --- */
+            .card { padding: 15px; }
+            .modal-content { padding: 15px; margin-top: 60px; max-height: calc(100vh - 80px); }
+            
+            /* --- NEW: Shrink headings and text --- */
+            .hero h1 { font-size: 2.2rem !important; }
+            h1 { font-size: 1.8rem !important; }
+            h2 { font-size: 1.4rem !important; }
+            h3 { font-size: 1.1rem !important; }
+            p { font-size: 0.95rem; }
+            
+            /* --- NEW: Shrink buttons and inputs --- */
+            .action-btn { padding: 12px 15px; font-size: 1rem; }
+            textarea { padding: 10px; font-size: 1rem; }
+            input, select { font-size: 0.95rem; padding: 8px; }
+            
+            /* --- NEW: Shrink flashcards so they fit on screen --- */
+            .flashcard-large { min-height: 120px; padding: 20px 10px; font-size: 1.1rem; }
+            .quiz-card { min-height: 200px; padding: 20px; font-size: 1.3rem; }
+            
+            /* --- NEW: Shrink the Pomodoro timer --- */
+            .pomodoro-wheel { width: 220px; height: 220px; }
+            .pomodoro-inner { width: 190px; height: 190px; }
+            #pomodoro-display { font-size: 3.5rem; }
         }
+
     </style>
 </head>
 <body>
@@ -1629,6 +1657,54 @@
                 }
             });
         }
+        // --- INDIVIDUAL CLEAR & GLOBAL BULK DELETE ---
+        window.clearSection = function(sectionType, context) {
+            const confirmed = confirm(`Are you sure you want to delete ALL ${sectionType} in this note?`);
+            if (!confirmed) return; saveState(context);
+            if (context === 'create') {
+                if (sectionType === 'flashcards') currentFlashcards = []; if (sectionType === 'definitions') currentDefinitions = []; if (sectionType === 'notes') currentPhrases = [];
+                displayResults();
+            } else if (context === 'modal') {
+                let savedData = JSON.parse(localStorage.getItem('justTheNotes_folders')) || {}; let noteData = savedData[activeMainFolder][activeSubFolder][activeNoteTitle];
+                if (sectionType === 'flashcards') noteData.flashcards = []; if (sectionType === 'definitions') noteData.definitions = []; if (sectionType === 'notes') noteData.notes = [];
+                localStorage.setItem('justTheNotes_folders', JSON.stringify(savedData)); renderModalData();
+            }
+        };
+
+        window.triggerGlobalConfirmDelete = function() { commitBulkDelete(getActiveContext()); }
+        window.triggerGlobalCancelDelete = function() { cancelBulkDelete(getActiveContext()); }
+
+        window.toggleBulkDelete = function(context) {
+            document.getElementById('btn-confirm-delete').classList.remove('hidden'); document.getElementById('btn-cancel-delete').classList.remove('hidden');
+            if(context === 'create') { isCreateDeleteMode = true; flashcardViewModeCreate = 'all'; displayResults(); document.getElementById('resultsArea').classList.add('delete-mode'); } 
+            else if (context === 'modal') { isModalDeleteMode = true; flashcardViewModeModal = 'all'; renderModalData(); document.getElementById('modalDataContainer').classList.add('delete-mode'); }
+        };
+
+        window.commitBulkDelete = function(context) {
+            document.getElementById('btn-confirm-delete').classList.add('hidden'); document.getElementById('btn-cancel-delete').classList.add('hidden'); saveState(context);
+            let container = document.getElementById(context === 'create' ? 'resultsArea' : 'modalDataContainer');
+            let checked = container.querySelectorAll('.bulk-delete-cb:checked'); let toDelete = { def: [], note: [], card: [] };
+            checked.forEach(cb => { toDelete[cb.getAttribute('data-type')].push(parseInt(cb.getAttribute('data-index'))); });
+
+            if(context === 'create') {
+                toDelete.def.sort((a,b)=>b-a).forEach(idx => currentDefinitions.splice(idx, 1)); toDelete.note.sort((a,b)=>b-a).forEach(idx => currentPhrases.splice(idx, 1)); toDelete.card.sort((a,b)=>b-a).forEach(idx => currentFlashcards.splice(idx, 1));
+                isCreateDeleteMode = false; flashcardViewModeCreate = 'single'; container.classList.remove('delete-mode'); displayResults(); 
+            } else {
+                let sData = JSON.parse(localStorage.getItem('justTheNotes_folders')); let nData = sData[activeMainFolder][activeSubFolder][activeNoteTitle];
+                toDelete.def.sort((a,b)=>b-a).forEach(idx => nData.definitions.splice(idx, 1)); toDelete.note.sort((a,b)=>b-a).forEach(idx => nData.notes.splice(idx, 1)); toDelete.card.sort((a,b)=>b-a).forEach(idx => nData.flashcards.splice(idx, 1));
+                localStorage.setItem('justTheNotes_folders', JSON.stringify(sData));
+                isModalDeleteMode = false; flashcardViewModeModal = 'single'; container.classList.remove('delete-mode'); renderModalData();
+            }
+        };
+
+        window.cancelBulkDelete = function(context) {
+            document.getElementById('btn-confirm-delete').classList.add('hidden'); document.getElementById('btn-cancel-delete').classList.add('hidden');
+            if(context === 'create') {
+                isCreateDeleteMode = false; flashcardViewModeCreate = 'single'; document.getElementById('resultsArea').classList.remove('delete-mode'); displayResults();
+            } else {
+                isModalDeleteMode = false; flashcardViewModeModal = 'single'; document.getElementById('modalDataContainer').classList.remove('delete-mode'); renderModalData();
+            }
+        };
 
         // --- FOLDER & SAVING LOGIC ---
         function loadSavedFolders() {
